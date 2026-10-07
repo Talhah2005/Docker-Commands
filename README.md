@@ -1,6 +1,9 @@
 # Docker Commands
 
-Quick reference for building, running, and debugging a multi-container app with Docker Compose.
+Quick reference for building, running, and debugging the Web Engineering Project with Docker Compose.
+
+Docker Hub user: `talhah2005`
+Images: `talhah2005/webeng-backend` and `talhah2005/webeng-frontend`
 
 ---
 
@@ -25,6 +28,7 @@ docker compose up -d --build         # rebuild images, then start (use after cod
 docker compose ps                    # list containers and their state (running / healthy)
 docker network ls                    # list networks (look for frontend-net and backend-net)
 docker volume ls                     # list volumes (look for mongo-data)
+docker images                        # list images on this machine
 ```
 
 ## 4. Logs
@@ -47,127 +51,113 @@ docker compose down -v               # same as above AND delete volumes (databas
 ## 6. Debugging
 
 ```bash
-docker compose exec backend sh       # open a shell inside the running backend container
-docker compose restart backend       # restart one service
-docker network inspect <project>_backend-net   # see which containers are on a network
-docker compose exec backend ping mongo         # should work (same network)
-docker compose exec frontend ping mongo        # should fail (different network)
+docker compose exec backend sh                      # open a shell inside the running backend container
+docker compose restart backend                      # restart one service
+docker network inspect webengineeringproject_backend-net   # see which containers are on a network
+docker compose exec backend ping mongo              # should work (same network)
+docker compose exec frontend ping mongo             # should fail (different network)
 ```
 
-## 7. Build a single image manually
+## 7. Push images to Docker Hub (on the laptop where the app is built)
 
 ```bash
-docker build -t zakat-backend ./Backend                  # build backend image
-docker build -t zakat-frontend ./Frontend/vite-project   # build frontend image
-```
-## 8. Push images to Docker Hub
+docker login                                        # log in as talhah2005
 
-Do this on your laptop, after the images are built.
+docker compose build                                # build images (local names: webengineeringproject-backend / -frontend)
+
+# Tag the local images with your Docker Hub name. Change 1.0 to the new version each release.
+docker tag webengineeringproject-backend:latest talhah2005/webeng-backend:1.0
+docker tag webengineeringproject-frontend:latest talhah2005/webeng-frontend:1.0
+
+# Upload
+docker push talhah2005/webeng-backend:1.0
+docker push talhah2005/webeng-frontend:1.0
+```
+
+Check the result at https://hub.docker.com/u/talhah2005
+
+### Pushing a new version (example: 2.0)
 
 ```bash
-docker login                                                # log in (use your Docker Hub username + password or access token)
-
-docker build -t zakat-backend ./Backend                     # build the image locally (skip if already built)
-docker build -t zakat-frontend ./Frontend/vite-project
-
-docker tag zakat-backend yourusername/zakat-backend:1.0     # rename it as <username>/<repo>:<version>
-docker tag zakat-frontend yourusername/zakat-frontend:1.0
-
-docker push yourusername/zakat-backend:1.0                  # upload to Docker Hub
-docker push yourusername/zakat-frontend:1.0
+docker compose build
+docker tag webengineeringproject-backend:latest talhah2005/webeng-backend:2.0
+docker tag webengineeringproject-frontend:latest talhah2005/webeng-frontend:2.0
+docker push talhah2005/webeng-backend:2.0
+docker push talhah2005/webeng-frontend:2.0
 ```
 
-Optionally also tag and push `latest`, so a plain pull gets the newest version:
+Use a new tag for every release. Pushing the same tag again overwrites the old one.
+
+### Optional: also push `latest`
 
 ```bash
-docker tag zakat-backend yourusername/zakat-backend:latest
-docker push yourusername/zakat-backend:latest
+docker tag webengineeringproject-backend:latest talhah2005/webeng-backend:latest
+docker push talhah2005/webeng-backend:latest
 ```
 
-Check the result at `https://hub.docker.com/repositories/yourusername`.
+## 8. Pull images from Docker Hub (on another laptop or the VPS)
 
-### Shortcut with Compose
+```bash
+docker pull talhah2005/webeng-backend:1.0           # download a specific version
+docker pull talhah2005/webeng-frontend:1.0
+docker images                                       # confirm they were downloaded
+```
 
-Add an `image:` name next to `build:` in `docker-compose.yml`:
+On the other machine you only need `docker-compose.yml` and `.env`, not the source code.
+In `docker-compose.yml`, use `image:` instead of `build:`:
 
 ```yaml
 backend:
-  build: ./Backend
-  image: yourusername/zakat-backend:1.0
-
+  image: talhah2005/webeng-backend:1.0
 frontend:
-  build: ./Frontend/vite-project
-  image: yourusername/zakat-frontend:1.0
-```
-
-Then one command builds, tags, and pushes everything:
-
-```bash
-docker compose build                 # builds and tags with the image: names
-docker compose push                  # pushes all services that have an image: name
-```
-
-## 9. Pull images from Docker Hub
-
-Do this on the VPS or any other machine.
-
-```bash
-docker login                                                # only needed for private repositories
-docker pull yourusername/zakat-backend:1.0                  # download a specific version
-docker pull yourusername/zakat-frontend:1.0
-docker pull yourusername/zakat-backend                      # no tag means :latest
-docker images                                               # list downloaded images
-```
-
-Run a pulled image directly (without Compose):
-
-```bash
-docker run -d -p 5000:5000 --name backend yourusername/zakat-backend:1.0
-```
-
-### Deploy with Compose on the VPS
-
-On the VPS you only need `docker-compose.yml` and `.env`, not the source code. Use `image:` and remove the `build:` lines, so the file has:
-
-```yaml
-backend:
-  image: yourusername/zakat-backend:1.0
-frontend:
-  image: yourusername/zakat-frontend:1.0
+  image: talhah2005/webeng-frontend:1.0
 ```
 
 ```bash
-docker compose pull                  # download the latest versions of all images
-docker compose up -d                 # start or update the containers
+docker compose pull                  # download the images listed in the compose file
+docker compose up -d                 # start the containers
 docker compose ps                    # confirm everything is running
 ```
 
-### Updating after a code change
+Then open http://localhost in the browser.
+
+### Updating to a new version on the other machine
 
 ```bash
-# On your laptop
-docker compose build
-docker compose push
-
-# On the VPS
+# 1. change the tag in docker-compose.yml, e.g. :1.0 -> :2.0
 docker compose pull
 docker compose up -d                 # only containers with a new image are recreated
+```
+
+### Rolling back
+
+```bash
+# change the tag in docker-compose.yml back to :1.0, then
+docker compose pull
+docker compose up -d
+```
+
+## 9. Build a single image manually (without Compose)
+
+```bash
+docker build -t talhah2005/webeng-backend:1.0 ./Backend
+docker build -t talhah2005/webeng-frontend:1.0 ./Frontend/vite-project
 ```
 
 ## 10. Docker Hub tips
 
 ```bash
-docker logout                        # log out of Docker Hub
-docker search nginx                  # search public images from the terminal
-docker rmi yourusername/zakat-backend:1.0   # delete a local image
+docker logout                                       # log out of Docker Hub
+docker rmi talhah2005/webeng-backend:1.0            # delete a local image
 ```
 
-- Use an **access token** instead of your password: Docker Hub > Account Settings > Personal access tokens. Then run `docker login -u yourusername` and paste the token as the password.
-- Free accounts get one private repository. Public repos are visible to everyone, so never put secrets or `.env` files in an image.
-- Always use version tags like `:1.0`, `:1.1` in production, so you can roll back by changing the tag.
-```
+- Use an **access token** instead of your password: Docker Hub > Account Settings > Personal access tokens. Then run `docker login -u talhah2005` and paste the token as the password.
+- Public repos are visible to everyone, so never put secrets or `.env` files inside an image.
+- Always use version tags like `:1.0`, `:2.0` in production, so you can roll back by changing the tag.
+- If the other laptop is an ARM machine (Mac M1/M2), build for both platforms:
+  `docker buildx build --platform linux/amd64,linux/arm64 -t talhah2005/webeng-backend:1.0 --push ./Backend`
 
-## 10. Cleanup
+## 11. Cleanup
 
 ```bash
 docker image prune                   # remove unused (dangling) images
